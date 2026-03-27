@@ -273,4 +273,4 @@ Database + Dashboard / PMS Integration
 
 ---
 
-*ADR-002 v1.1 | Status: Accepted | Last updated: 2026-03-26*
+*ADR-001 v1.1 | Status: Accepted | Last updated: 2026-03-26*
