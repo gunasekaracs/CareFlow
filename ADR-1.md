@@ -1,28 +1,29 @@
-# ADR-001: Indoor Positioning Technology for Age Care Facility Room Cleaning Tracker
+# ADR-002: Indoor Positioning Technology for Hotel Room Cleaning Tracker
 
 | Field | Detail |
 |---|---|
-| **ADR Number** | ADR-001 |
-| **Title** | Indoor Positioning Technology for Age Care Facility Room Cleaning Tracker |
+| **ADR Number** | ADR-002 |
+| **Title** | Indoor Positioning Technology for Hotel Room Cleaning Tracker |
 | **Status** | Accepted |
-| **Date** | 2026-03-24 |
-| **Deciders** | Engineering Team, Age Care Facility Operations |
+| **Date** | 2026-03-26 |
+| **Deciders** | Engineering Team, Hotel Operations |
 | **Reviewed By** | Infrastructure Lead, Product Owner |
+| **Revision** | 1.1 — Blueiot AoA added as Option 4 |
 
 ---
 
 ## Context
 
-The age care facility requires an automated system to track when a cleaner has spent at least **10 continuous minutes inside a single room**, at which point the room is automatically marked as cleaned. This eliminates manual check-off processes and provides real-time visibility to supervisors via a dashboard integrated with the Property Management System (PMS).
+The hotel requires an automated system to track when a cleaner has spent at least **10 continuous minutes inside a single room**, at which point the room is automatically marked as cleaned. This eliminates manual check-off processes and provides real-time visibility to supervisors via a dashboard integrated with the Property Management System (PMS).
 
 The system must:
 - Identify which room a cleaner is currently in
 - Track continuous dwell time per room
 - Trigger a "room cleaned" event after 10 uninterrupted minutes
 - Reset the timer if the cleaner leaves the room before the threshold is met
-- Integrate with a Node.js backend and existing age care facility PMS
+- Integrate with a Node.js backend and existing hotel PMS
 
-Three technology options were evaluated for the indoor positioning layer.
+Four technology options were evaluated for the indoor positioning layer.
 
 ---
 
@@ -30,54 +31,57 @@ Three technology options were evaluated for the indoor positioning layer.
 
 - **Room-level accuracy** — must reliably distinguish adjacent rooms
 - **Infrastructure cost** — hardware cost per room and total deployment cost
-- **Battery life** — operational overhead of replacing/recharging tags
+- **Setup simplicity** — speed of deployment and ease of configuration
+- **Staff experience** — minimal friction for cleaning staff day-to-day
 - **Integration simplicity** — ease of connecting to Node.js backend
 - **Reliability** — resistance to signal interference and environmental factors
 - **Regulatory compliance** — no special licensing or approvals required
 - **Scalability** — suitable for multi-floor, multi-property deployment
+- **Future extensibility** — potential to support additional use cases beyond cleaning
 
 ---
 
 ## Options Considered
 
-### Option 1 — BLE (Bluetooth Low Energy) Beacons
+### Option 1 — BLE (Bluetooth Low Energy) Beacons ✅ SELECTED
 
-BLE beacons are small, battery-powered transmitters placed in each room. The cleaner carries a smartphone or BLE tag that detects signal strength (RSSI) from nearby beacons. The strongest signal determines the current room. Dwell time is tracked in the Node.js backend via an MQTT or REST API integration.
+BLE beacons are small, battery-powered transmitters placed in each room. The cleaner carries a smartphone running a lightweight app that continuously scans for nearby beacon signals. Signal strength (RSSI) from each beacon is used to determine the cleaner's current room — the beacon with the strongest signal wins. Dwell time is tracked in the Node.js backend via MQTT or REST API. When the cleaner remains in a single room for 10 uninterrupted minutes, the backend automatically marks the room as cleaned.
 
 **Pros:**
-- Low hardware cost (~$10–$30 per room)
-- Works with standard smartphones — no dedicated tag needed
-- Low setup complexity; widely supported ecosystem
-- Easy Node.js integration via MQTT or HTTP
+- Lowest hardware cost (~$10–$30 per room beacon)
+- Works with standard smartphones — no dedicated hardware tag required for staff
+- Lowest setup complexity of all options; beacons are plug-and-play
+- Easy Node.js integration via MQTT or REST API
 - No regulatory requirements
+- Large, mature ecosystem with many off-the-shelf solutions (Estimote, Kontakt.io, Minew)
+- Cleaners can receive push notifications and view their task list on the same device
 
 **Cons:**
-- No mesh networking — requires a Wi-Fi gateway in range of every area
-- Shorter battery life on active scanning devices (6–18 months)
-- Signal bleed through thin walls can cause false room assignments
-- Less suitable for large open-plan areas or suites
-- No native integration with smart room devices (lighting, thermostats)
+- No mesh networking — requires a Wi-Fi gateway within range of all areas
+- Beacon battery replacement required every 6–18 months
+- Signal bleed through thin hotel walls can occasionally cause false room assignments
+- Accuracy (1–3m) is RSSI-based and susceptible to environmental interference
+- Less suitable for large open-plan suites without careful beacon placement
 
 ---
 
-### Option 2 — Zigbee ✅ SELECTED
+### Option 2 — Zigbee
 
-Zigbee is a low-power mesh radio protocol operating on 2.4GHz. Each room is fitted with a mains-powered Zigbee router node (which can double as a smart light switch or plug). The cleaner wears a small, long-life Zigbee end-device tag. The tag's signal is picked up by nearby router nodes and relayed through the mesh to a Zigbee coordinator on a Raspberry Pi. Zigbee2MQTT translates device events into MQTT messages that the Node.js backend subscribes to. The backend runs dwell timer logic and publishes room status updates.
+Zigbee is a low-power mesh radio protocol operating on 2.4GHz. Each room is fitted with a mains-powered Zigbee router node (which can double as a smart light switch or plug). The cleaner wears a small, long-life Zigbee end-device tag. The tag's signal is picked up by nearby router nodes and relayed through the self-healing mesh network to a Zigbee coordinator on a Raspberry Pi. Zigbee2MQTT translates device events into MQTT messages that the Node.js backend subscribes to.
 
 **Pros:**
-- Self-healing mesh network — devices relay signals hop-by-hop across floors
-- Excellent battery life on tags (1–3 years)
-- Integrates with existing Zigbee age care facility infrastructure (smart lighting, door locks, thermostats)
-- Strong Node.js integration path via Zigbee2MQTT → Mosquitto MQTT broker
-- No regulatory requirements
-- Supports both local Raspberry Pi deployment and cloud-bridged architecture
+- Self-healing mesh network — devices relay signals hop-by-hop, no gateway gaps
+- Excellent battery life on dedicated tags (1–3 years)
+- Integrates with existing Zigbee hotel infrastructure (smart lighting, door locks, thermostats)
+- Strong Node.js integration via Zigbee2MQTT → Mosquitto MQTT broker
 - Channel hopping avoids interference with Wi-Fi and BLE
 
 **Cons:**
-- Requires a dedicated Zigbee tag for each cleaner (no smartphone app option)
-- Slightly higher hardware cost than BLE (~$20–$40 per room node)
-- Moderate setup complexity — requires Zigbee2MQTT and MQTT broker configuration
-- Room-level accuracy slightly lower than BLE (2–5m vs 1–3m), though sufficient for room detection
+- Requires a dedicated Zigbee tag for each cleaner — no smartphone app option
+- Higher hardware cost than BLE (~$20–$40 per room node)
+- Moderate setup complexity — requires Zigbee2MQTT, MQTT broker, and Raspberry Pi configuration
+- Staff must carry and manage an additional physical device
+- Room-level accuracy (2–5m) slightly lower than BLE
 
 ---
 
@@ -88,63 +92,97 @@ Standard GPS relies on line-of-sight to satellites and does not function reliabl
 **Pros:**
 - Familiar technology concept
 - Standard GPS works well for outdoor campus/resort geofencing
-- Pseudolite systems can theoretically achieve room-level accuracy
+- Pseudolite systems can theoretically achieve room-level accuracy indoors
 
 **Cons:**
-- Standard GPS is entirely unsuitable indoors — accuracy degrades to 10–50m+ inside buildings, making room-level detection impossible
-- Pseudolite systems cost $100,000–$500,000+ to deploy in a multi-floor age care facility
+- Standard GPS is entirely unsuitable indoors — accuracy degrades to 10–50m+ inside buildings
+- Pseudolite systems cost $100,000–$500,000+ to deploy in a multi-floor hotel
 - Pseudolites require spectrum licensing in Australia (ACMA)
-- Standard smartphones cannot receive pseudolite signals — requires specialised hardware
-- Extremely high RF engineering complexity to manage multipath reflections
-- No viable path to Node.js integration without proprietary SDK
-- Not used in any commercial age care facility operations context
+- Standard smartphones cannot receive pseudolite signals — requires specialised hardware receivers
+- Extremely high RF engineering complexity to manage multipath signal reflections
+- No viable path to Node.js integration without a proprietary SDK
+- Not used in any commercial hotel operations context globally
+
+---
+
+### Option 4 — Blueiot (Bluetooth AoA — Angle of Arrival)
+
+Blueiot is a Real-Time Location System (RTLS) built on **Bluetooth 5.1 AoA (Angle of Arrival)** technology — a fundamentally different positioning method to standard BLE RSSI beacons. Rather than estimating proximity from signal strength, AoA anchor devices use a built-in multi-antenna array to measure the precise *angle* at which the cleaner's tag signal arrives. Multiple anchors triangulate to determine an exact two-dimensional or three-dimensional position. Blueiot provides the full stack: AoA anchors, personnel tags, a positioning engine (local or cloud), and an open API for integration.
+
+The positioning engine exposes a REST API and WebSocket stream, making it straightforward to consume real-time location data in a Node.js backend without requiring an MQTT broker or Zigbee middleware layer.
+
+**How it works:**
+1. AoA anchors are mounted on ceilings — one anchor can cover an entire floor or wing
+2. Each cleaner wears a small Bluetooth 5.1 tag that transmits a Constant Tone Extension (CTE) signal
+3. Each anchor's antenna array calculates the angle of arrival and sends data to the Blueiot positioning engine
+4. The engine resolves x/y coordinates at 0.1–0.3m accuracy and pushes updates via REST API or WebSocket
+5. The Node.js backend consumes the location stream, maps coordinates to room IDs, and runs dwell timer logic
+
+**Pros:**
+- Highest accuracy of all options — 0.1–0.3m (sub-metre), compared to 1–3m for standard BLE RSSI
+- Fewer anchors needed — a single base station can cover one floor, reducing installation points significantly
+- Tag battery life exceeds 5 years — lowest ongoing maintenance overhead of all options
+- Strong anti-interference capability — phase difference direction finding resists multipath reflections from walls, glass, and metal
+- Compatible with all Bluetooth 4.0+ devices and standard smartphones
+- Open REST API and WebSocket output — clean Node.js integration without additional middleware
+- Purpose-built for personnel tracking in complex indoor environments (healthcare, hospitality, logistics)
+- Highly scalable — a single anchor handles up to 500 concurrent tags
+- Future use cases unlocked: precise asset tracking, occupancy analytics, visitor navigation, emergency mustering
+
+**Cons:**
+- Higher upfront system cost than standard BLE beacons — anchor hardware and Blueiot platform licensing
+- Requires dedicated Blueiot tags for staff (though compatible with standard Bluetooth devices)
+- Moderate setup complexity — anchor placement requires site survey to optimise coverage angles
+- Blueiot is a specialised vendor; less community support than the BLE beacon ecosystem
+- Slight overkill for basic room-level detection — sub-metre precision exceeds the minimum requirement
+- Hardware ships from Beijing; lead time approximately 1–2 weeks to Australia
 
 ---
 
 ## Comparison Summary
 
-| Criteria | Option 1: BLE Beacons | Option 2: Zigbee | Option 3: GPS |
-|---|---|---|---|
-| Room-level accuracy | Good (1–3m) | Good (2–5m) | Not viable indoors |
-| Standard smartphone support | Yes | No — dedicated tag | Partial (hybrid only) |
-| Tag battery life | 6–18 months | 1–3 years | Hours |
-| Mesh networking | No | Yes | No |
-| Hardware cost (100 rooms) | $1,500–$3,000 | $2,000–$4,000 | $100,000–$500,000+ |
-| Setup complexity | Low | Moderate | Very high |
-| Existing age care facility ecosystem fit | Moderate | High | None |
-| Regulatory requirements | None | None | Spectrum licence required |
-| Indoor reliability | High | High | Very poor |
-| Node.js integration | MQTT / REST | MQTT via Zigbee2MQTT | Proprietary SDK only |
+| Criteria | Option 1: BLE Beacons | Option 2: Zigbee | Option 3: GPS | Option 4: Blueiot AoA |
+|---|---|---|---|---|
+| Positioning method | RSSI signal strength | RSSI signal strength | Satellite triangulation | Angle of Arrival (AoA) |
+| Room-level accuracy | Good (1–3m) | Good (2–5m) | Not viable indoors | Excellent (0.1–0.3m) |
+| Standard smartphone support | Yes | No — dedicated tag | Partial (hybrid only) | Yes (BT 4.0+) |
+| Tag / device battery life | 6–18 months (beacon) | 1–3 years (tag) | Hours (active GPS) | 5+ years (tag) |
+| Anchors / beacons needed | 1 per room | 1 router per room | N/A | 1 per floor / wing |
+| Mesh networking | No | Yes — self-healing | No | No (star topology) |
+| Hardware cost (100 rooms) | $1,500–$3,000 | $2,000–$4,000 | $100,000–$500,000+ | $5,000–$15,000 (est.) |
+| Setup complexity | Low | Moderate | Very high | Moderate |
+| Existing hotel ecosystem fit | Moderate | High | None | Moderate |
+| Regulatory requirements | None | None | Spectrum licence (AU) | None |
+| Indoor reliability | High | High | Very poor | Very high |
+| Node.js integration | MQTT / REST API | MQTT via Zigbee2MQTT | Proprietary SDK only | REST API / WebSocket |
+| Future extensibility | Low | Moderate | None | High |
+| Staff device required | Smartphone (existing) | Dedicated Zigbee tag | Specialised receiver | Small BT 5.1 tag |
 
 ---
 
 ## Decision
 
-**Option 2 — Zigbee is selected.**
+**Option 1 — BLE Beacons is selected.**
 
-Zigbee is the most operationally suitable technology for age care facility room-level dwell tracking at scale. The mesh networking capability is a decisive advantage in multi-floor age care facility environments, eliminating the need for a gateway in every corridor zone. The 1–3 year tag battery life significantly reduces operational overhead compared to BLE. The integration path through Zigbee2MQTT and Mosquitto MQTT into Node.js is well-established, thoroughly documented, and supports both on-premises and cloud-bridged deployments.
+BLE beacons offer the best combination of low cost, fast deployment, and minimal friction for cleaning staff at this stage. Because cleaners use their existing smartphones rather than a dedicated hardware tag, there is no additional device to distribute, charge, or replace. The beacon hardware is inexpensive, widely available in Australia, and requires no specialist configuration. Integration with the Node.js backend via MQTT is straightforward and well-documented.
 
-GPS was rejected outright due to fundamental physical limitations indoors and prohibitive cost. BLE remains a viable fallback for single-floor or small age care facility deployments where simplicity is prioritised over mesh resilience.
+Blueiot AoA (Option 4) is acknowledged as a technically superior solution — particularly its sub-metre accuracy, per-floor anchor coverage, and 5-year tag battery life — and is the **recommended upgrade path** if the hotel later expands the system to support asset tracking, visitor navigation, or multi-property operations. Its higher upfront cost and dedicated tag requirement make it less optimal for an initial deployment focused solely on room cleaning verification.
+
+Zigbee is preferred over BLE if the hotel already has Zigbee smart infrastructure deployed. GPS is rejected outright due to fundamental indoor limitations.
 
 ---
 
 ## Architecture Overview
 
 ```
-Zigbee Tags (cleaners)
-        │ radio
+BLE Beacons (one per room, battery-powered)
+        │ Bluetooth RSSI signal
         ▼
-Zigbee Router Nodes (one per room, mains-powered)
-        │ mesh hops
+Cleaner's Smartphone (iOS or Android app)
+        │ HTTP / MQTT over Wi-Fi
         ▼
-Zigbee Coordinator (Raspberry Pi, SONOFF ZBDongle-E)
+Wi-Fi Gateway (existing hotel AP infrastructure)
         │
-        ▼
-Zigbee2MQTT (running on Raspberry Pi)
-        │ MQTT publish
-        ▼
-Mosquitto Broker (local Pi or cloud VM, port 8883 TLS)
-        │ MQTT subscribe
         ▼
 Node.js Backend (dwell timer logic, room state machine)
         │
@@ -153,62 +191,86 @@ Database + Dashboard / PMS Integration
 ```
 
 **MQTT Topic Structure:**
-- `zigbee2mqtt/<device_id>` — device location and signal events (inbound)
-- `age care facility/rooms/status` — room cleaned events published by Node.js (outbound)
+- `hotel/cleaner/<cleaner_id>/location` — smartphone publishes detected room ID
+- `hotel/rooms/status` — Node.js publishes cleaned status updates
+- PMS webhook fires on room status change to `clean`
 
 **Dwell Timer Logic:**
-1. Node.js receives MQTT message indicating cleaner tag is associated with a room's router node
-2. A 10-minute countdown timer starts for that cleaner/room pair
-3. If the tag signal shifts to a different room node, the timer resets
-4. A 45-second grace period prevents premature resets from brief corridor crossings
-5. On timer completion, a "room cleaned" event is published and persisted to the database
+1. Smartphone app continuously scans BLE beacons and identifies the strongest RSSI
+2. Detected room ID is sent to the Node.js backend every 15–30 seconds
+3. Backend starts a 10-minute countdown timer for the cleaner/room pair
+4. If the detected room changes, the timer resets immediately
+5. A 45-second grace period prevents resets from brief corridor crossings
+6. On timer completion, a "room cleaned" event is persisted and broadcast to the dashboard
 
 ---
 
 ## Consequences
 
 **Positive:**
-- Reliable, room-accurate indoor positioning with minimal operational maintenance
-- Self-healing mesh network tolerates individual node failure without system-wide outage
-- Zigbee infrastructure can be shared with smart lighting, thermostat, and door lock systems, reducing total age care facility IoT cost
-- Cloud-bridged MQTT architecture supports multi-property management from a single backend
+- Fastest path to deployment — beacons can be placed and working within hours
+- No new hardware for cleaning staff — uses smartphones they already carry
+- Supervisor dashboard provides real-time visibility across all floors
+- PMS auto-update removes manual room-ready check-off entirely
+- Low ongoing maintenance cost — beacons only need battery replacement every 12–18 months
+- Clear upgrade path to Blueiot AoA for higher precision use cases in future
 
 **Negative:**
-- Cleaners must carry a dedicated Zigbee tag — a smartphone app is not possible with Zigbee
-- Initial setup requires Zigbee2MQTT and MQTT broker configuration, which has a learning curve for teams unfamiliar with IoT middleware
-- Tags must be managed, distributed, and occasionally replaced at end of battery life
+- Cleaning staff must have their smartphones on them and the app running during shifts
+- Beacon battery replacement creates periodic maintenance overhead across all rooms
+- Thin walls in older hotel buildings may require RSSI threshold tuning to prevent false room assignments
+- No mesh redundancy — if the Wi-Fi gateway in an area goes offline, location reporting pauses for that zone
 
 **Risks and Mitigations:**
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Signal bleed between adjacent rooms | Medium | Set RSSI threshold floors; require 3+ consecutive readings before committing room assignment |
-| Cleaner forgets to carry tag | Low | Supervisor dashboard shows untracked cleaners in real time |
-| Raspberry Pi hardware failure | Low | Run Zigbee2MQTT in Docker with automatic restart; keep a spare Pi on-site |
-| MQTT broker connection loss (cloud) | Medium | Local Mosquitto on Pi buffers messages; Node.js reconnects automatically with exponential backoff |
+| Signal bleed between adjacent rooms | Medium | Set minimum RSSI threshold; require 3+ consecutive matching readings before committing room assignment |
+| Staff leaves phone at trolley | Low | Supervisor dashboard flags cleaner as inactive; push notification after 5 mins with no movement |
+| Beacon battery dies mid-shift | Low | Monitor beacon health via Kontakt.io / Estimote cloud dashboard; replace on schedule |
+| Wi-Fi outage in a zone | Low | App queues location events locally and syncs when connectivity resumes |
+| App killed by phone OS in background | Medium | Use background BLE scanning permissions; test on both iOS and Android |
 
 ---
 
 ## Recommended Hardware (Australia)
 
+### Option 1 — BLE Beacons (Selected)
+
 | Component | Product | Supplier | Est. Cost |
 |---|---|---|---|
-| Zigbee coordinator | SONOFF ZBDongle-E | Core Electronics (core-electronics.com.au) | ~$35 |
-| Room router nodes | SONOFF ZBMINI or IKEA TRÅDFRI plug | Core Electronics / IKEA | ~$18–$20 each |
-| Raspberry Pi host | Raspberry Pi 4 (2GB) | Core Electronics | ~$80 |
-| Cleaner tags | Tuya Zigbee personnel tag | AliExpress | ~$20 each |
-| Software | Zigbee2MQTT + Mosquitto | Open source — free | $0 |
+| BLE beacons | Minew E8 or Kontakt.io S18 | AliExpress / kontakt.io | ~$15–$25 each |
+| Beacon management | Kontakt.io Cloud or Estimote Cloud | kontakt.io / estimote.com | Free tier available |
+| Staff smartphones | Existing Android / iOS devices | — | $0 (existing) |
+| MQTT broker | Mosquitto (self-hosted) or HiveMQ Cloud | mosquitto.org / hivemq.com | Free tier available |
+
+**Estimated total hardware cost for a 100-room hotel:** ~$1,500–$2,500 AUD
+
+### Option 4 — Blueiot AoA (Future Upgrade Path)
+
+| Component | Product | Supplier | Est. Cost |
+|---|---|---|---|
+| AoA anchors | Blueiot BA3000-T ceiling anchor | blueiot.com | ~$200–$400 each |
+| Personnel tags | Blueiot BT110 wristband or card tag | blueiot.com | ~$30–$50 each |
+| Positioning engine | Blueiot AoA Engine (local or cloud) | blueiot.com | Licence fee — contact vendor |
+| Demo / POC kit | Blueiot Development Kit | blueiot.com | Available on request |
+
+**Estimated total hardware cost for a 100-room hotel (Blueiot):** ~$5,000–$15,000 AUD (fewer anchors offset higher unit cost)
 
 ---
-  
+
 ## Links and References
 
-- Zigbee2MQTT documentation: https://www.zigbee2mqtt.io
+- Kontakt.io BLE beacons: https://kontakt.io
+- Estimote BLE beacons: https://estimote.com
+- Minew beacons: https://www.minewtech.com
+- Blueiot AoA RTLS: https://www.blueiot.com
+- Blueiot AoA technology overview: https://www.blueiot.com/technology
+- Blueiot positioning engine API: https://www.blueiot.com/product/aoa-engine
 - Mosquitto MQTT broker: https://mosquitto.org
-- SONOFF Zigbee devices (AU): https://core-electronics.com.au
-- Zigbee specialist supplier (AU): https://shop.dialedin.com.au
+- HiveMQ Cloud (managed MQTT): https://www.hivemq.com/mqtt-cloud-broker
 - Node.js MQTT client library: https://github.com/mqttjs/MQTT.js
 
 ---
 
-*ADR-001 | Status: Accepted | Last updated: 2026-03-24*
+*ADR-002 v1.1 | Status: Accepted | Last updated: 2026-03-26*
