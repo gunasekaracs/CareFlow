@@ -2,7 +2,7 @@
 
 | Field | Detail |
 |---|---|
-| **ADR Number** | ADR-002 |
+| **ADR Number** | ADR-001 |
 | **Title** | Indoor Positioning Technology for Hotel Room Cleaning Tracker |
 | **Status** | Accepted |
 | **Date** | 2026-03-26 |
