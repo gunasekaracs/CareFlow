@@ -1,28 +1,28 @@
-# ADR-006: Authentication Architecture for Hotel Platform
+# ADR-006: Authentication Architecture for Age-Care Platform
 
 | Field | Detail |
 |---|---|
 | **ADR Number** | ADR-006 |
-| **Title** | Authentication Architecture for Hotel Platform |
+| **Title** | Authentication Architecture for Age-Care Platform |
 | **Status** | Accepted |
 | **Date** | 2026-05-04 |
 | **Deciders** | Engineering Team, Product Owner |
-| **Reviewed By** | Infrastructure Lead, Hotel Operations |
+| **Reviewed By** | Infrastructure Lead, Age-Care Operations |
 
 ---
 
 ## Context
 
-The hotel platform has grown beyond the initial room cleaning tracker to encompass four collaborative subsystems:
+The age-care platform has grown beyond the initial room cleaning tracker to encompass four collaborative subsystems:
 
 - **Room Cleaning Tracker** — BLE-based detection of cleaner presence and dwell time
 - **Cleaning Audit** — supervisory review and sign-off of cleaning records
 - **Laundry Management** — tracking of linen jobs and laundry cycles
 - **Laundry Audit** — audit trail for laundry operations and compliance
 
-All four subsystems share a common user base (hotel staff) and a common role model. A single authentication strategy is required so that a user logs in once and can access the subsystems appropriate to their role without re-authenticating.
+All four subsystems share a common user base (age-care staff) and a common role model. A single authentication strategy is required so that a user logs in once and can access the subsystems appropriate to their role without re-authenticating.
 
-Additionally, the platform includes a dedicated **Admin Panel** used by hotel administrators to manage users, assign roles, and control access. The requirement is that user management is owned entirely by the admin panel — hotel administrators must not need to interact with any third-party auth UI (e.g. Keycloak's own admin console) to perform day-to-day user operations.
+Additionally, the platform includes a dedicated **Admin Panel** used by age-care administrators to manage users, assign roles, and control access. The requirement is that user management is owned entirely by the admin panel — age-care administrators must not need to interact with any third-party auth UI (e.g. Keycloak's own admin console) to perform day-to-day user operations.
 
 The backend is built on ASP.NET Core. The frontend is a React SPA using PKCE for secure token acquisition. The platform runs in Docker/Kubernetes.
 
@@ -32,7 +32,7 @@ The backend is built on ASP.NET Core. The frontend is a React SPA using PKCE for
 
 - **Single sign-on across all subsystems** — one login session must work across all four services
 - **Role-based access control** — distinct roles per subsystem must be enforced at the API level
-- **Admin panel owns user management UX** — no exposure of Keycloak admin UI to hotel staff
+- **Admin panel owns user management UX** — no exposure of Keycloak admin UI to age-care staff
 - **Minimal auth code per service** — each .NET API should not implement its own auth logic
 - **Self-hosted** — user credentials and PII must remain on-premises or in a controlled environment, not a third-party SaaS
 - **Proven security** — token issuance, refresh rotation, revocation, and brute-force protection must not be hand-rolled
@@ -86,7 +86,7 @@ Delegate authentication entirely to a managed cloud IdP. The React SPA authentic
 
 **Cons:**
 - Vendor lock-in — migrating away later is costly
-- Hotel staff PII (names, credentials) is stored with a third-party vendor
+- Age-care staff PII (names, credentials) is stored with a third-party vendor
 - Cost scales with active users
 - Less control over token claims and user attribute schema
 
@@ -119,13 +119,13 @@ User data is split across two stores:
 - Configuration learning curve (realms, clients, scopes)
 - Admin REST API integration adds implementation effort to the Admin Panel
 
-**Verdict:** Accepted. Keycloak provides enterprise-grade auth with full data sovereignty, covers all four subsystems under a single realm, and allows the Admin Panel to own the user management UX without exposing Keycloak internals to hotel staff.
+**Verdict:** Accepted. Keycloak provides enterprise-grade auth with full data sovereignty, covers all four subsystems under a single realm, and allows the Admin Panel to own the user management UX without exposing Keycloak internals to age-care staff.
 
 ---
 
 ## Decision
 
-**Keycloak (self-hosted)** is selected as the authentication provider for the hotel platform.
+**Keycloak (self-hosted)** is selected as the authentication provider for the age-care platform.
 
 ---
 
@@ -152,13 +152,13 @@ All user management operations originate from the Admin Panel and are proxied th
 ```
 Admin Panel  →  Admin .NET API  →  Keycloak Admin REST API  (identity + roles)
                      │
-                     └──────────→  Platform DB               (hotel domain attributes)
+                     └──────────→  Platform DB               (age-care domain attributes)
 ```
 
 On user creation, the Admin API:
-1. Creates the user in Keycloak via `POST /admin/realms/hotel/users`
-2. Assigns the appropriate realm role via `POST /admin/realms/hotel/users/{id}/role-mappings/realm`
-3. Persists hotel domain attributes to the platform database, linked by the Keycloak-issued UUID
+1. Creates the user in Keycloak via `POST /admin/realms/age-care/users`
+2. Assigns the appropriate realm role via `POST /admin/realms/age-care/users/{id}/role-mappings/realm`
+3. Persists age-care domain attributes to the platform database, linked by the Keycloak-issued UUID
 4. On failure at step 3, executes a compensating transaction to delete the Keycloak user
 
 ### Token Validation (Per .NET API)
@@ -169,8 +169,8 @@ Each subsystem API validates incoming JWTs locally without calling Keycloak on e
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = "https://keycloak.internal/realms/hotel";
-        options.Audience  = "hotel-platform";
+        options.Authority = "https://keycloak.internal/realms/age-care";
+        options.Audience  = "age-care-platform";
         // Public keys fetched automatically from Keycloak's JWKS endpoint
     });
 ```
@@ -194,8 +194,8 @@ A single set of realm roles covers all four subsystems. Each .NET API enforces t
 
 | Role | Cleaning Tracker | Cleaning Audit | Laundry Mgmt | Laundry Audit | Admin Panel |
 |---|---|---|---|---|---|
-| `hotel_admin` | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| `hotel_manager` | ✅ Read/Write | ✅ Read | ✅ Read/Write | ✅ Read | ❌ |
+| `agecare_admin` | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| `agecare_manager` | ✅ Read/Write | ✅ Read | ✅ Read/Write | ✅ Read | ❌ |
 | `floor_supervisor` | ✅ Read/Write | ✅ Read | ❌ | ❌ | ❌ |
 | `cleaner` | ✅ Own records | ❌ | ❌ | ❌ | ❌ |
 | `laundry_staff` | ❌ | ❌ | ✅ Read/Write | ❌ | ❌ |
@@ -210,9 +210,9 @@ A single set of realm roles covers all four subsystems. Each .NET API enforces t
 | Email, password hash | Keycloak | Credential management is Keycloak's responsibility |
 | Realm roles | Keycloak | Embedded in JWT at token issuance |
 | Enabled / disabled flag | Keycloak | Controls login access and active sessions |
-| Employee ID | Platform DB | Hotel domain concept, not an auth attribute |
+| Employee ID | Platform DB | Age-care domain concept, not an auth attribute |
 | Floor assignment | Platform DB | Operational data belonging to the platform domain |
-| Department | Platform DB | Hotel organisational structure |
+| Department | Platform DB | Age-care organisational structure |
 | Hire date | Platform DB | HR data — no auth relevance |
 | Keycloak UUID | Platform DB (FK) | Foreign key linking the two stores |
 
@@ -245,11 +245,11 @@ services:
 ## Consequences
 
 **Positive:**
-- Hotel staff experience seamless single sign-on across all four subsystems
+- Age-care staff experience seamless single sign-on across all four subsystems
 - Each .NET API enforces roles from the JWT with no inter-service auth calls at runtime
-- The Admin Panel provides a complete, hotel-branded user management experience — hotel administrators have no exposure to Keycloak internals
+- The Admin Panel provides a complete, age-care-branded user management experience — age-care administrators have no exposure to Keycloak internals
 - Adding a fifth subsystem or a mobile app requires no changes to the auth architecture
-- All user credentials and PII remain within the hotel's controlled infrastructure
+- All user credentials and PII remain within the age-care facility's controlled infrastructure
 
 **Negative:**
 - Keycloak adds infrastructure overhead (~512MB RAM, PostgreSQL dependency)
